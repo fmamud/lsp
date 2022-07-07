@@ -144,12 +144,12 @@ function http.start(host, port)
 
         local status = string.format("%s %d %s", request.version, response.status, response.reason)
 
-        local headers = ""
+        local headers = {}
         for name, value in pairs(response.headers) do
-            headers = headers .. string.format("%s: %s\r\n", name, value)
+            table.insert(headers, string.format("%s: %s", name, value))
         end
 
-        local output = string.format("%s\r\n%s\r\n%s", status, headers, response.body)
+        local output = string.format("%s\r\n%s\r\n%s", status, table.concat(headers, "\r\n"), response.body)
 
         nc:write(output)
     end
