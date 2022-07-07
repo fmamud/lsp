@@ -1,8 +1,7 @@
 local http = require('http.server')
 
-http.get("/jobs", function (request) 
-    print("hi jobs get") 
+http.get("/hello", function (request)
+    return "It works!"
 end)
 
 http.start()
-
