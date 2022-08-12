@@ -149,7 +149,7 @@ function http.start(host, port)
             table.insert(headers, string.format("%s: %s", name, value))
         end
 
-        local output = string.format("%s\r\n%s\r\n%s", status, table.concat(headers, "\r\n"), response.body)
+        local output = string.format("%s\r\n%s\r\n\r\n%s", status, table.concat(headers, "\r\n"), response.body)
 
         nc:write(output)
     end
