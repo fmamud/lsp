@@ -1,4 +1,5 @@
 local postgresql = {}
+local mapper = require("db.mapper")
 
 local command = "PGPASSWORD=$password psql --csv -h $host -p $port -U $username $name"
 
@@ -14,7 +15,7 @@ local function connection_url()
     return string.gsub(command, "%$(%w+)", config)
 end
 
-local function execute(sql, mapper)
+local function execute(sql, mapper_fn)
     if not sql or sql:len() == 0 then
         error(string.format("Query must be not null and not empty", sql))
     end
@@ -27,38 +28,15 @@ local function execute(sql, mapper)
         table.insert(columns, column)
     end
     
-    return mapper(columns, resultset)
-end
-
-local function table_mapper(columns, resultset)
-    local result = {}
-    for line in resultset:lines() do
-        local column = {}
-        local counter = 1
-        for value in line:gmatch("%w+") do
-            column[columns[counter]] = value
-            counter = counter + 1
-        end
-        table.insert(result, column)
-    end
-
-    return result
-end
-
-local function count_mapper(columns, resultset)
-    if #columns == 1 then
-        return resultset:read("n")
-    end
-
-    error(string.format("Count query must return a single result. (expected: 1, actual: %d)", #columns), 3)
+    return mapper_fn(columns, resultset)
 end
 
 function postgresql.query(sql)
-    return execute(sql, table_mapper)
+    return execute(sql, mapper.table)
 end
 
 function postgresql.count(sql)
-    return execute(sql, count_mapper)
+    return execute(sql, mapper.count)
 end
 
 return postgresql
