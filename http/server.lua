@@ -1,17 +1,8 @@
 local http = {}
 
+local request = require("http.request")
+
 local handlers = {}
-
-local VERBS = {"GET", "POST"}
-
-local function get_verb(target)
-    for idx, verb in pairs(VERBS) do
-        if verb:upper() == target then
-            return target
-        end
-    end
-end
-
 
 local mt = {
     __index = function (t, target)
@@ -21,11 +12,7 @@ local mt = {
 
         local target = target:upper()
 
-        local verb = get_verb(target)
-        
-        if not verb then
-            error(string.format("HTTP '%s' verb not available: [%s]", target, table.concat(VERBS, ", ")))
-        end
+        local verb = request.verb(target)
         
         return function(path, fn)
             local path_found = rawget(handlers, path)
@@ -65,37 +52,22 @@ local function dump(o)
     return tostring(o)
 end
 
-local function get_request(input)
-    local request, headers = {}, {}
-    for line in input:lines() do
-        if line == "\r" then break end
-
-        for verb, path, version in line:gmatch("(%u+) (/%g+) (HTTP/%g+)") do
-            request.verb = verb
-
-            local params = {}
-            for name, value in path:gmatch("([^&=?]-)=([^&=?]+)") do
-                params[name] = value
-            end
-
-            request.path = path:match("([^?]+)")
-            request.params = params
-            request.version = version
-        end
-
-        for name, value in line:gmatch("(%g+:) (%g+)") do
-            headers[name] = value
-        end
-    end
-    request.headers = headers
-    return request
-end
-
 local function get_handler(request)
     local path = rawget(handlers, request.path)
     if path then
         return rawget(path, request.verb)
     end
+end
+
+local function parse_response(response)
+    local status = string.format("%s %d %s", response.request.version, response.status, response.reason)
+
+    local headers = {}
+    for name, value in pairs(response.headers) do
+        table.insert(headers, string.format("%s: %s", name, value))
+    end
+
+    return string.format("%s\r\n%s\r\n\r\n%s", status, table.concat(headers, "\r\n"), response.body)
 end
 
 local function perform(request)
@@ -121,16 +93,13 @@ local function perform(request)
                 response.body = dump(result)
             end
         end
-        return response
+        return parse_response(response)
     end
 end
-
 
 function http.start(host, port)
     local host = host or "localhost"
     local port = port or 1234
-    
-    print(string.format("Listening on %s:%d", host, port))
 
     local buffer = os.tmpname()
     local input <close> = io.popen(string.format("tail -f %s", buffer))
@@ -138,20 +107,13 @@ function http.start(host, port)
     while true do
         local nc <close> = io.popen(string.format("nc -lv %d >> %s 2>&1", port, buffer), "w")
 
-        local request = get_request(input)
+        local request = request.parse(input)
+
+        print(request)
 
         local response = perform(request)
 
-        local status = string.format("%s %d %s", request.version, response.status, response.reason)
-
-        local headers = {}
-        for name, value in pairs(response.headers) do
-            table.insert(headers, string.format("%s: %s", name, value))
-        end
-
-        local output = string.format("%s\r\n%s\r\n\r\n%s", status, table.concat(headers, "\r\n"), response.body)
-
-        nc:write(output)
+        nc:write(response)
     end
 
     os.remove(buffer)
